@@ -71,12 +71,18 @@ async function extractText(file: Express.Multer.File) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Gemini AI
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini AI helper
+const getAiClient = (req: express.Request) => {
+  const customKey = req.headers["x-gemini-api-key"] as string;
+  if (customKey) {
+    return new GoogleGenAI({ apiKey: customKey });
+  }
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+};
 
 const systemInstruction = `أنت مساعد ذكي مخصص لدعم موظفي الشركة. مهمتك الأساسية هي الإجابة على استفسارات الموظفين بدقة متناهية بناءً فقط على السياق والبيانات المستخرجة من ملفات الشركة المرفوعة والتي سيتم تزويدك بها مع كل سؤال.
 القواعد الصارمة:
@@ -88,24 +94,24 @@ const systemInstruction = `أنت مساعد ذكي مخصص لدعم موظفي
 
 app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
     try {
+      const ai = getAiClient(req);
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
         return res.status(400).json({ error: "No files uploaded" });
       }
 
+      let totalChunksAdded = 0;
       for (const file of files) {
         console.log(`Processing admin file: ${file.originalname}`);
         const text = await extractText(file);
         const chunks = chunkText(text, 500);
-        
-        let totalChunksAdded = 0;
         
         for (const chunk of chunks) {
           if (!chunk.trim()) continue;
           
           // Generate embedding for chunk using the text-embedding-004 model
           const embedRes = await ai.models.embedContent({
-            model: "text-embedding-004",
+            model: "gemini-embedding-2-preview",
             contents: chunk,
           });
           
@@ -129,6 +135,7 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
 
   app.post("/api/chat", upload.array("files"), async (req, res) => {
     try {
+      const ai = getAiClient(req);
       const { message, history } = req.body;
       const files = req.files as Express.Multer.File[];
       const parsedHistory = history ? JSON.parse(history) : [];
@@ -144,7 +151,7 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
         if (vectorStore.length > 0) {
           // Embed the query
           const queryEmbed = await ai.models.embedContent({
-            model: "text-embedding-004",
+            model: "gemini-embedding-2-preview",
             contents: message,
           });
 
@@ -198,7 +205,7 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
       });
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         contents: geminiHistory,
         config: {
           systemInstruction,

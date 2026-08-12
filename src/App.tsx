@@ -6,6 +6,9 @@ import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [userName, setUserName] = useState("");
+  const [isAskingForName, setIsAskingForName] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState("");
   const [inputValue, setInputValue] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,6 +28,17 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem("customApiKey") || "");
+
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setCustomApiKey(val);
+    if (val) {
+      localStorage.setItem("customApiKey", val);
+    } else {
+      localStorage.removeItem("customApiKey");
+    }
+  };
   
   // Global Company Files (Admin uploaded)
   const [adminFiles, setAdminFiles] = useState<File[]>([]);
@@ -136,9 +150,36 @@ export default function App() {
     setSelectedFiles([]);
     setIsLoading(true);
 
+    if (!userName && !isAskingForName && messages.length === 0) {
+      setIsAskingForName(true);
+      setPendingQuestion(currentInput);
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: "model",
+            content: "ممكن اتعرف باسمك في البدايه علشان اقدر ارحب بيك",
+          },
+        ]);
+        setIsLoading(false);
+      }, 800);
+      return;
+    }
+
+    let questionToAsk = currentInput;
+    let currentUserName = userName;
+
+    if (isAskingForName) {
+      currentUserName = currentInput;
+      setUserName(currentUserName);
+      setIsAskingForName(false);
+      questionToAsk = pendingQuestion;
+    }
+
     try {
       const formData = new FormData();
-      formData.append("message", currentInput);
+      formData.append("message", questionToAsk);
       
       // We only send previous history content to save bandwidth/tokens, excluding previous files for simplicity.
       const historyToSend = messages.map(m => ({
@@ -152,9 +193,15 @@ export default function App() {
         formData.append("files", file);
       });
 
+      const headers: Record<string, string> = {};
+      if (customApiKey) {
+        headers["x-gemini-api-key"] = customApiKey;
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         body: formData,
+        headers,
       });
 
       if (!response.ok) {
@@ -166,7 +213,7 @@ export default function App() {
       const newModelMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "model",
-        content: data.answer,
+        content: `أنا سعيد جداً بخدمتك يا ${currentUserName}،\n\n${data.answer}`,
         suggestedQuestions: data.suggestedQuestions,
       };
 
@@ -231,7 +278,7 @@ export default function App() {
   };
 
   const processAdminFiles = async (files: File[]) => {
-    const validExtensions = ['.pdf', '.docx', '.xlsx', '.csv', '.txt'];
+    const validExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt'];
     const validFiles = files.filter(f => validExtensions.some(ext => f.name.toLowerCase().endsWith(ext)));
     
     if (validFiles.length === 0) return;
@@ -248,9 +295,15 @@ export default function App() {
         setUploadProgress(prev => Math.min(prev + 5, 90));
       }, 500);
 
+      const headers: Record<string, string> = {};
+      if (customApiKey) {
+        headers["x-gemini-api-key"] = customApiKey;
+      }
+
       const response = await fetch("/api/admin/upload", {
         method: "POST",
         body: formData,
+        headers,
       });
 
       clearInterval(interval);
@@ -609,16 +662,16 @@ export default function App() {
                   <div className="relative">
                     <input 
                       type="password"
-                      value="********************************"
-                      disabled
-                      className="w-full px-4 py-2.5 bg-green-50/50 border border-green-200 text-green-700 rounded-xl cursor-not-allowed opacity-80"
+                      value={customApiKey}
+                      onChange={handleApiKeyChange}
+                      placeholder="اترك الحقل فارغاً لاستخدام المفتاح الافتراضي للسيرفر"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all pr-10"
                     />
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-green-600 text-xs font-bold">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-blue-600 text-xs font-bold">
                       <Lock className="w-3.5 h-3.5" />
-                      مؤمن ومخفي بالسيرفر
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500">مفتاح Gemini API مشفر ومخفي تماماً في الخلفية (Backend) لضمان أعلى معايير الأمان، ولا يمكن لأحد رؤيته.</p>
+                  <p className="text-xs text-slate-500">تم إخفاء المفتاح ولا يتم حفظه إلا في متصفحك الحالي، وعند إرساله للسيرفر يتم استخدامه بأمان لضمان عدم تسريبه.</p>
                 </div>
 
                 <hr className="border-slate-100" />

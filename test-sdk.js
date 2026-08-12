@@ -1,0 +1,11 @@
+import { GoogleGenAI } from "@google/genai";
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+async function run() {
+  try {
+    const res = await ai.models.generateContent({ model: "gemini-1.5-flash", contents: "test" });
+    console.log("Success gemini-1.5-flash:", res.text);
+  } catch(e) {
+    console.log("Error generate:", e.message);
+  }
+}
+run();
