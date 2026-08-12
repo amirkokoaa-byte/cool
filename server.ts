@@ -7,14 +7,13 @@ import fs from "fs";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
-import { initializeApp, getApps } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore";
 
-// Initialize Firebase Admin
-if (getApps().length === 0) {
-  initializeApp();
-}
-const db = getFirestore();
+// Initialize Firebase Client
+const firebaseConfig = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf-8'));
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -111,7 +110,7 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
           });
           
           if (embedRes.embeddings && embedRes.embeddings[0].values) {
-            await db.collection("company_knowledge").add({
+            await addDoc(collection(db, "company_knowledge"), {
               text: chunk,
               embedding: embedRes.embeddings[0].values,
               source: file.originalname
@@ -139,7 +138,7 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
       // RAG Retrieval if we have message
       if (message) {
         // Fetch existing vectors from Firestore
-        const knowledgeSnapshot = await db.collection("company_knowledge").get();
+        const knowledgeSnapshot = await getDocs(collection(db, "company_knowledge"));
         const vectorStore = knowledgeSnapshot.docs.map(doc => doc.data() as VectorDoc);
 
         if (vectorStore.length > 0) {
