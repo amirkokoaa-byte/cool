@@ -4,6 +4,7 @@ import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
+// @ts-ignore
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
@@ -64,16 +65,15 @@ async function extractText(file: Express.Multer.File) {
   return file.buffer.toString("utf-8");
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  app.use(express.json());
+app.use(express.json());
 
-  // Initialize Gemini AI
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini AI
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  const systemInstruction = `أنت مساعد ذكي مخصص لدعم موظفي الشركة. مهمتك الأساسية هي الإجابة على استفسارات الموظفين بدقة متناهية بناءً فقط على السياق والبيانات المستخرجة من ملفات الشركة المرفوعة والتي سيتم تزويدك بها مع كل سؤال.
+const systemInstruction = `أنت مساعد ذكي مخصص لدعم موظفي الشركة. مهمتك الأساسية هي الإجابة على استفسارات الموظفين بدقة متناهية بناءً فقط على السياق والبيانات المستخرجة من ملفات الشركة المرفوعة والتي سيتم تزويدك بها مع كل سؤال.
 القواعد الصارمة:
 1. لا تستخدم أي معلومات خارجية أو معرفة عامة للإجابة. اعتمد 100% على النص المرفق.
 2. إذا وجدت الإجابة في البيانات، قدمها في حقل 'answer' بشكل احترافي، مباشر، ومنسق. واترك حقل 'suggestedQuestions' فارغاً أو بمصفوفة فارغة.
@@ -81,7 +81,7 @@ async function startServer() {
 4. بعد هذا الاعتذار، قم بتحليل سياق سؤال الموظف والبيانات المتاحة لديك، واقترح عليه 3 أسئلة بديلة أو قريبة من سياق سؤاله (موجود إجاباتها بالفعل في الداتا).
 5. قم بإرجاع الأسئلة المقترحة في حقل 'suggestedQuestions' كمصفوفة من النصوص.`;
 
-  app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
+app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
@@ -209,7 +209,7 @@ async function startServer() {
         },
       });
 
-      const resultText = response.text();
+      const resultText = response.text;
       if (!resultText) {
         throw new Error("No response from Gemini API");
       }
@@ -222,24 +222,29 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
+// Export the Express app for Vercel
+export default app;
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+// Only start the server if we are not in a Vercel Serverless environment
+if (!process.env.VERCEL) {
+  (async () => {
+    // Vite middleware for development
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })();
 }
-
-startServer();

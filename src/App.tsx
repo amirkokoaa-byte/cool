@@ -51,6 +51,7 @@ export default function App() {
     const timer = setInterval(() => setTime(new Date()), 1000);
     
     // Initialize Web Speech API
+    // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -538,7 +539,7 @@ export default function App() {
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="أدخل 0000"
+                      placeholder="أدخل كلمة المرور..."
                     />
                   </div>
                   
@@ -600,6 +601,24 @@ export default function App() {
                     placeholder="مثال: المساعد الذكي للموظفين"
                   />
                   <p className="text-xs text-slate-500">يتم حفظ الاسم وتحديثه فوراً في الشريط العلوي.</p>
+                </div>
+
+                {/* API Key Security Display */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-700">مفتاح الذكاء الاصطناعي (API Key)</label>
+                  <div className="relative">
+                    <input 
+                      type="password"
+                      value="********************************"
+                      disabled
+                      className="w-full px-4 py-2.5 bg-green-50/50 border border-green-200 text-green-700 rounded-xl cursor-not-allowed opacity-80"
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-green-600 text-xs font-bold">
+                      <Lock className="w-3.5 h-3.5" />
+                      مؤمن ومخفي بالسيرفر
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">مفتاح Gemini API مشفر ومخفي تماماً في الخلفية (Backend) لضمان أعلى معايير الأمان، ولا يمكن لأحد رؤيته.</p>
                 </div>
 
                 <hr className="border-slate-100" />
