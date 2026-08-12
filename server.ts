@@ -7,6 +7,14 @@ import fs from "fs";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+
+// Initialize Firebase Admin
+if (getApps().length === 0) {
+  initializeApp();
+}
+const db = getFirestore();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -15,8 +23,6 @@ interface VectorDoc {
   embedding: number[];
   source: string;
 }
-
-const vectorStore: VectorDoc[] = [];
 
 // Cosine similarity between two vectors
 function cosineSimilarity(vecA: number[], vecB: number[]) {
@@ -93,6 +99,8 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
         const text = await extractText(file);
         const chunks = chunkText(text, 500);
         
+        let totalChunksAdded = 0;
+        
         for (const chunk of chunks) {
           if (!chunk.trim()) continue;
           
@@ -103,16 +111,17 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
           });
           
           if (embedRes.embeddings && embedRes.embeddings[0].values) {
-            vectorStore.push({
+            await db.collection("company_knowledge").add({
               text: chunk,
               embedding: embedRes.embeddings[0].values,
               source: file.originalname
             });
+            totalChunksAdded++;
           }
         }
       }
 
-      res.json({ success: true, message: "Files processed and embedded successfully", totalChunks: vectorStore.length });
+      res.json({ success: true, message: "Files processed and embedded successfully", totalChunks: totalChunksAdded });
     } catch (error: any) {
       console.error("Admin upload error:", error);
       res.status(500).json({ error: error.message || "Failed to process files" });
@@ -127,27 +136,33 @@ app.post("/api/admin/upload", upload.array("files"), async (req, res) => {
 
       let contextText = "";
 
-      // RAG Retrieval if we have embedded data
-      if (vectorStore.length > 0 && message) {
-        // Embed the query
-        const queryEmbed = await ai.models.embedContent({
-          model: "text-embedding-004",
-          contents: message,
-        });
+      // RAG Retrieval if we have message
+      if (message) {
+        // Fetch existing vectors from Firestore
+        const knowledgeSnapshot = await db.collection("company_knowledge").get();
+        const vectorStore = knowledgeSnapshot.docs.map(doc => doc.data() as VectorDoc);
 
-        if (queryEmbed.embeddings && queryEmbed.embeddings[0].values) {
-          const queryVector = queryEmbed.embeddings[0].values;
-          
-          // Score and sort chunks
-          const scoredChunks = vectorStore.map(doc => ({
-            ...doc,
-            score: cosineSimilarity(queryVector, doc.embedding)
-          })).sort((a, b) => b.score - a.score);
-          
-          // Take top 4 chunks
-          const topChunks = scoredChunks.slice(0, 4);
-          
-          contextText = "بيانات الشركة المسترجعة:\n" + topChunks.map(c => `[المصدر: ${c.source}]\n${c.text}`).join("\n\n---\n\n");
+        if (vectorStore.length > 0) {
+          // Embed the query
+          const queryEmbed = await ai.models.embedContent({
+            model: "text-embedding-004",
+            contents: message,
+          });
+
+          if (queryEmbed.embeddings && queryEmbed.embeddings[0].values) {
+            const queryVector = queryEmbed.embeddings[0].values;
+            
+            // Score and sort chunks
+            const scoredChunks = vectorStore.map(doc => ({
+              ...doc,
+              score: cosineSimilarity(queryVector, doc.embedding)
+            })).sort((a, b) => b.score - a.score);
+            
+            // Take top 4 chunks
+            const topChunks = scoredChunks.slice(0, 4);
+            
+            contextText = "بيانات الشركة المسترجعة:\n" + topChunks.map(c => `[المصدر: ${c.source}]\n${c.text}`).join("\n\n---\n\n");
+          }
         }
       }
 
