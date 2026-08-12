@@ -1,0 +1,8 @@
+{
+  "name": "Employee AI Assistant",
+  "description": "An AI assistant for company employees that answers questions based on uploaded documents.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
